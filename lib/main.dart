@@ -6,10 +6,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'firebase_options.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  
+  if (Firebase.apps.isEmpty) {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      debugPrint('Firebase initialized successfully.');
+    } catch (e, st) {
+      // Ghi log để debug — nhưng không crash app nếu vì lý do duplicate do hot-reload
+      debugPrint('Firebase.initializeApp() threw: $e');
+      debugPrint('$st');
+    }
+  } else {
+    debugPrint(
+      'Firebase already initialized - skipping Firebase.initializeApp().',
+    );
+  }
+
   runApp(const MyApp());
 }
 
