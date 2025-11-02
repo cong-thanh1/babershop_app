@@ -108,9 +108,11 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
             child: const Text('Hủy'),
           ),
           ElevatedButton(
-            onPressed: () {
-              _submitReview(appointment, rating, reviewController.text.trim());
+            onPressed: () async {
+              // Đóng dialog trước khi submit để tránh vấn đề navigation
               Navigator.of(ctx).pop();
+              // Submit review sau khi đóng dialog
+              await _submitReview(appointment, rating, reviewController.text.trim());
             },
             child: const Text('Gửi đánh giá'),
           ),
@@ -127,27 +129,101 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    await FirebaseFirestore.instance
-        .collection('barbers')
-        .doc(appointment.barberId)
-        .collection('reviews')
-        .add({
-          'rating': rating,
-          'comment': comment,
-          'userId': user.uid,
-          'userName': user.displayName ?? 'Người dùng ẩn danh',
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+    try {
+      // Kiểm tra xem appointment đã có status 'reviewed' chưa
+      // Lấy lại appointment từ Firestore để có status mới nhất
+      final appointmentDoc = await FirebaseFirestore.instance
+          .collection('appointments')
+          .doc(appointment.id)
+          .get();
 
-    await FirebaseFirestore.instance
-        .collection('appointments')
-        .doc(appointment.id)
-        .update({'status': 'reviewed'});
+      if (!appointmentDoc.exists) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Không tìm thấy booking này!'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
 
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Cảm ơn bạn đã đánh giá!')));
+      final currentStatus = appointmentDoc.data()?['status'] as String?;
+      
+      // Nếu đã được đánh giá rồi, không cho phép đánh giá lại
+      if (currentStatus == 'reviewed') {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Booking này đã được đánh giá rồi!'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Chỉ cho phép đánh giá khi status là 'completed'
+      if (currentStatus != 'completed') {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Chỉ có thể đánh giá booking đã hoàn thành!'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Tạo review mới và cập nhật status trong cùng một batch để đảm bảo tính nhất quán
+      final batch = FirebaseFirestore.instance.batch();
+      
+      // Thêm review
+      final reviewRef = FirebaseFirestore.instance
+          .collection('barbers')
+          .doc(appointment.barberId)
+          .collection('reviews')
+          .doc();
+      
+      batch.set(reviewRef, {
+        'rating': rating,
+        'comment': comment,
+        'userId': user.uid,
+        'userName': user.displayName ?? 'Người dùng ẩn danh',
+        'appointmentId': appointment.id,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      // Cập nhật status của appointment thành 'reviewed'
+      final appointmentRef = FirebaseFirestore.instance
+          .collection('appointments')
+          .doc(appointment.id);
+      
+      batch.update(appointmentRef, {'status': 'reviewed'});
+
+      // Commit batch
+      await batch.commit();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cảm ơn bạn đã đánh giá!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Lỗi khi đánh giá: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Lỗi khi đánh giá: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 

@@ -7,12 +7,14 @@ class Review {
   final double rating;
   final String comment;
   final DateTime createdAt;
+  final String? appointmentId; // ID của appointment liên quan
 
   Review({
     required this.userName,
     required this.rating,
     required this.comment,
     required this.createdAt,
+    this.appointmentId,
   });
 
   factory Review.fromFirestore(DocumentSnapshot doc) {
@@ -22,6 +24,7 @@ class Review {
       rating: (data['rating'] ?? 0.0).toDouble(),
       comment: data['comment'] ?? '',
       createdAt: (data['createdAt'] as Timestamp).toDate(),
+      appointmentId: data['appointmentId'] as String?,
     );
   }
 }

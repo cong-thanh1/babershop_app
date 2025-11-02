@@ -65,13 +65,16 @@ service cloud.firestore {
 
       // Update:
       // - Admin cập nhật bất kỳ.
-      // - Chủ sở hữu CHỈ được hủy (status -> 'cancelled'), không đổi field khác.
+      // - Chủ sở hữu được hủy (status -> 'cancelled') hoặc đánh giá (status -> 'reviewed'), không đổi field khác.
       allow update: if isAdmin() ||
         (
           isSignedIn() &&
           resource.data.userId == request.auth.uid &&
-          request.resource.data.status == 'cancelled' &&
-          request.resource.data.diff(resource.data).changedKeys().hasOnly(['status', 'updatedAt'])
+          (
+            (request.resource.data.status == 'cancelled' || 
+             request.resource.data.status == 'reviewed') &&
+            request.resource.data.diff(resource.data).changedKeys().hasOnly(['status', 'updatedAt'])
+          )
         );
 
       // Xóa: chỉ admin
